@@ -41,6 +41,8 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,s
 .tbtn{font-size:12px;padding:5px 12px;background:var(--surf2);border:.5px solid var(--bdr);border-radius:999px;cursor:pointer;color:var(--txt2)}
 .tbtn:hover{background:var(--surf3)}
 .cbtn{font-size:12px;padding:5px 13px;background:none;border:.5px solid var(--bdr2);border-radius:var(--rad-s);cursor:pointer;color:var(--red)}
+.fbtn{font-size:12px;padding:5px 13px;background:none;border:.5px solid var(--bdr2);border-radius:var(--rad-s);cursor:pointer;color:var(--txt2);display:flex;align-items:center;gap:5px;font-family:inherit}
+.fbtn:hover{background:var(--surf2);border-color:var(--txt2);color:var(--txt)}
 .cbtn:hover{background:#fcebeb}
 @media(prefers-color-scheme:dark){.cbtn:hover{background:#501313}}
 
@@ -226,7 +228,7 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,s
 /* ════════════════════════════════════════════
    CONFIGURATION — replace with your own
 ════════════════════════════════════════════ */
-const GOOGLE_CLIENT_ID = '739683822393-9cmpr0bn452l1pl46to95eefv4k9htum.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
 
 /* ════ CONSTANTS ════ */
 const PALETTE=[
@@ -458,6 +460,24 @@ function downloadCSV(content,filename){
 
 /* ════ CALENDAR ACTIONS ════ */
 window.chDay=d=>{const n=new Date(curDate);n.setDate(n.getDate()+d);curDate=n;dpMon=new Date(curDate);selBlk=null;render();};
+
+window.fillBackward=()=>{
+  const cdk=dk();
+  // Build ordered list of all 72 block keys for the current day
+  const keys=[];
+  for(let hr=0;hr<24;hr++) for(let sl=0;sl<3;sl++) keys.push(`${cdk}:${hr}:${sl}`);
+
+  // Pass 1: fill every empty block with the activity + note of the next non-empty block
+  for(let i=0;i<keys.length;i++){
+    if(normB(blocks[keys[i]])) continue; // already assigned, skip
+    for(let j=i+1;j<keys.length;j++){
+      const nb=normB(blocks[keys[j]]);
+      if(nb){blocks[keys[i]]={actId:nb.actId,note:nb.note};break;}
+    }
+  }
+
+  scheduleSave();render();
+};
 window.goToday=()=>{curDate=new Date();dpMon=new Date();selBlk=null;render();};
 window.clearDay=()=>{const p=dk()+':';for(const k of Object.keys(blocks))if(k.startsWith(p))delete blocks[k];scheduleSave();render();};
 window.togglePicker=()=>{pickerOpen=!pickerOpen;dpMon=new Date(curDate);render();};
@@ -569,6 +589,7 @@ function render(){
   H+=`<button class="tbtn" onclick="goToday()">Today</button>`;
   H+=`</div><div class="topbar-right">`;
   H+=`<button class="cbtn" onclick="clearDay()">Clear day</button>`;
+  H+=`<button class="fbtn" onclick="fillBackward()" title="Fill all empty blocks on this day: each blank inherits the activity and note of the next assigned block">↑ Fill blanks</button>`;
   H+=`<div id="auth-bar" style="display:flex;align-items:center;gap:7px"></div>`;
   H+=`</div></div>`;
 
