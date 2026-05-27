@@ -216,11 +216,45 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,s
 .csv-drop{border:1.5px dashed var(--bdr2);border-radius:var(--rad-s);padding:24px;text-align:center;font-size:13px;color:var(--txt3);cursor:pointer;transition:background .1s,border-color .1s;margin-bottom:12px}
 .csv-drop:hover,.csv-drop.drag{background:var(--surf2);border-color:var(--txt2)}
 .csv-drop input{display:none}
+
+/* ═══ NOTES PANEL ═══ */
+.notes-panel{background:var(--surf);border:.5px solid var(--bdr2);border-radius:var(--rad);padding:16px 18px;margin-top:20px}
+.notes-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.notes-title{font-size:13px;font-weight:600;color:var(--txt)}
+.notes-search{width:100%;background:var(--surf2);border:.5px solid var(--bdr2);border-radius:var(--rad-s);padding:7px 10px 7px 30px;font-size:13px;color:var(--txt);font-family:inherit;outline:none;transition:border-color .15s;margin-bottom:12px}
+.notes-search:focus{border-color:var(--txt2)}
+.notes-search-wrap{position:relative;margin-bottom:12px}
+.notes-search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;opacity:.4}
+.note-card{border:.5px solid var(--bdr2);border-radius:var(--rad-s);overflow:hidden;margin-bottom:8px;background:var(--surf)}
+.note-card:last-child{margin-bottom:0}
+.note-header{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;user-select:none;transition:background .08s}
+.note-header:hover{background:var(--surf2)}
+.note-date{font-family:var(--mono);font-size:11px;color:var(--txt3);flex-shrink:0;white-space:nowrap}
+.note-title-input{flex:1;background:transparent;border:none;outline:none;font-size:13px;font-weight:500;color:var(--txt);font-family:inherit;cursor:text;min-width:0}
+.note-title-input::placeholder{color:var(--txt3)}
+.note-chevron{font-size:10px;color:var(--txt3);transition:transform .15s;flex-shrink:0}
+.note-chevron.open{transform:rotate(180deg)}
+.note-del{background:none;border:none;cursor:pointer;font-size:15px;color:var(--txt3);padding:0 2px;line-height:1;opacity:0;transition:opacity .1s;flex-shrink:0}
+.note-header:hover .note-del{opacity:.5}
+.note-del:hover{opacity:1!important;color:var(--red)}
+.note-body{border-top:.5px solid var(--bdr);padding:0}
+.note-textarea{width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--txt);font-family:inherit;resize:none;padding:10px 12px;line-height:1.6;min-height:80px;display:block}
+.note-add-btn{width:100%;padding:8px;background:var(--surf2);border:.5px dashed var(--bdr2);border-radius:var(--rad-s);font-size:13px;cursor:pointer;color:var(--txt3);font-family:inherit;transition:background .1s,color .1s,border-color .1s;margin-top:4px}
+.note-add-btn:hover{background:var(--surf3);color:var(--txt);border-color:var(--bdr2)}
+.view-toggle-btn{width:100%;padding:9px 12px;background:var(--surf);border:.5px solid var(--bdr2);border-radius:var(--rad-s);font-size:13px;cursor:pointer;color:var(--txt);font-family:inherit;transition:background .1s,border-color .1s;display:flex;align-items:center;justify-content:center;gap:7px;font-weight:500;margin-bottom:10px}
+.view-toggle-btn:hover{background:var(--surf2);border-color:var(--txt2)}
+.hash-chip{padding:4px 11px;border-radius:999px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--mono);background:var(--surf2);color:var(--txt2);border:.5px solid var(--bdr2);transition:background .1s,color .1s}
+.hash-chip:hover{background:var(--surf3);color:var(--txt)}
+.hash-chip.active{background:var(--txt);color:var(--bg)}
+.hashtag-wrap{display:flex;flex-wrap:wrap;gap:6px}
+.notes-col{display:flex;flex-direction:column;min-width:0}
+.notes-col .notes-panel{margin-top:0;border-radius:var(--rad)}
+.notes-empty{text-align:center;color:var(--txt3);font-size:13px;padding:20px 0}
 .csv-preview{background:var(--surf2);border-radius:var(--rad-s);padding:10px;font-size:11px;font-family:var(--mono);color:var(--txt2);max-height:120px;overflow-y:auto;margin-bottom:12px;white-space:pre-wrap;word-break:break-all}
 </style>
 </head>
 <body>
-<div class="shell"><div id="app"></div></div>
+<div class="shell"><div id="app"></div><div id="notes-root"></div></div>
 <div id="modal-root"></div>
 <div id="ex-modal-root"></div>
 
@@ -262,10 +296,15 @@ const DEF_ACTS=[
 ];
 const DRIVE_ACTS_FILE='blockplanner_activities.json';
 const DRIVE_TL_FILE='blockplanner_timeline.json';
-const LS_CATS='bp5-cats', LS_ACTS='bp5-acts', LS_BLOCKS='bp5-blk';
+const DRIVE_NOTES_FILE='blockplanner_notes.json';
+const LS_CATS='bp5-cats', LS_ACTS='bp5-acts', LS_BLOCKS='bp5-blk', LS_NOTES='bp5-notes';
 
 /* ════ APP STATE ════ */
 let cats=DEF_CATS.map(c=>({...c}));
+let notes=[]; // [{id,title,content,dateStr,createdAt,collapsed}]
+let noteSearch='';
+let driveNotesId=null;
+let viewMode='timeline'; // 'timeline' | 'notes'
 let acts=DEF_ACTS.map(a=>({...a}));
 let blocks={};
 
@@ -311,11 +350,13 @@ function saveLocal(){
   try{localStorage.setItem(LS_CATS,JSON.stringify(cats));}catch(e){}
   try{localStorage.setItem(LS_ACTS,JSON.stringify(acts.filter(a=>!DEF_ACTS.find(d=>d.id===a.id))));}catch(e){}
   try{localStorage.setItem(LS_BLOCKS,JSON.stringify(blocks));}catch(e){}
+  try{localStorage.setItem(LS_NOTES,JSON.stringify(notes));}catch(e){}
 }
 function loadLocal(){
   try{const c=localStorage.getItem(LS_CATS);if(c)cats=JSON.parse(c);}catch(e){}
   try{const a=localStorage.getItem(LS_ACTS);if(a){const cu=JSON.parse(a);acts=[...DEF_ACTS.map(a=>({...a})),...cu];}}catch(e){}
   try{const b=localStorage.getItem(LS_BLOCKS);if(b)blocks=JSON.parse(b);}catch(e){}
+  try{const n=localStorage.getItem(LS_NOTES);if(n)notes=JSON.parse(n);}catch(e){}
 }
 
 /* ════ GOOGLE AUTH ════ */
@@ -381,6 +422,8 @@ async function loadFromDrive(){
     if(af){driveActsId=af;const d=await driveRead(af);if(d.cats)cats=d.cats;if(d.acts)acts=[...DEF_ACTS.map(a=>({...a})),...(d.acts||[]).filter(a=>!DEF_ACTS.find(d=>d.id===a.id))];}
     const tf=await driveFindFile(DRIVE_TL_FILE);
     if(tf){driveTlId=tf;const d=await driveRead(tf);if(d.blocks){blocks=d.blocks;pruneBlocks();}}
+    const nf=await driveFindFile(DRIVE_NOTES_FILE);
+    if(nf){driveNotesId=nf;const d=await driveRead(nf);if(d.notes)notes=d.notes;}
   }catch(e){console.error('Drive load:',e);syncState='err';}
 }
 function scheduleSave(){
@@ -393,6 +436,7 @@ function scheduleSave(){
       const customActs=acts.filter(a=>!DEF_ACTS.find(d=>d.id===a.id));
       driveActsId=await driveWrite(driveActsId,DRIVE_ACTS_FILE,{cats,acts:customActs});
       driveTlId=await driveWrite(driveTlId,DRIVE_TL_FILE,{blocks});
+      driveNotesId=await driveWrite(driveNotesId,DRIVE_NOTES_FILE,{notes});
       syncState='ok';
     }catch(e){console.error('Drive save:',e);syncState='err';}
     renderAuthBar();
@@ -460,6 +504,76 @@ function downloadCSV(content,filename){
 
 /* ════ CALENDAR ACTIONS ════ */
 window.chDay=d=>{const n=new Date(curDate);n.setDate(n.getDate()+d);curDate=n;dpMon=new Date(curDate);selBlk=null;render();};
+
+/* ════ NOTE ACTIONS ════ */
+function fmtNoteDate(d=new Date()){const y=String(d.getFullYear()).slice(2),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return`${y}${m}${day}`;}
+window.addNote=()=>{
+  const id='n'+Date.now();
+  notes.unshift({id,title:'',content:'',dateStr:fmtNoteDate(),createdAt:Date.now(),collapsed:false});
+  scheduleSave();renderNotes();
+  setTimeout(()=>{const el=document.getElementById('nt-'+id);if(el){el.focus();}},50);
+};
+window.delNote=id=>{if(!confirm('Delete this note?'))return;notes=notes.filter(n=>n.id!==id);scheduleSave();renderNotes();};
+window.toggleNote=id=>{const n=notes.find(x=>x.id===id);if(n)n.collapsed=!n.collapsed;renderNotes();};
+window.updNoteTitle=(id,v)=>{const n=notes.find(x=>x.id===id);if(n){n.title=v;scheduleSave();}};
+window.updNoteContent=(id,v)=>{const n=notes.find(x=>x.id===id);if(n){n.content=v;autoResizeNote(id);scheduleSave();}};
+window.setNoteSearch=v=>{noteSearch=v;renderNotes();};
+function autoResizeNote(id){const el=document.getElementById('nc-'+id);if(!el)return;el.style.height='auto';el.style.height=el.scrollHeight+'px';}
+
+window.setView=v=>{viewMode=v;noteSearch='';render();};
+window.filterByTag=tag=>{noteSearch=(noteSearch===tag?'':tag);render();};
+function extractHashtags(){
+  const set=new Set();
+  for(const n of notes){
+    const matches=(n.title+' '+n.content).match(/#[\w\u00C0-\u024F]+/g)||[];
+    for(const m of matches)set.add(m.toLowerCase());
+  }
+  return[...set].sort();
+}
+function buildNotesHTML(){
+  const q=noteSearch.toLowerCase();
+  const visible=notes.filter(n=>!q||(n.title+n.content).toLowerCase().includes(q));
+  let H='';
+  H+=`<div class="notes-head"><span class="notes-title">Notes</span><button class="note-add-btn" style="width:auto;padding:5px 12px;margin:0;border-style:solid" onclick="addNote()">+ New note</button></div>`;
+  H+=`<div class="notes-search-wrap"><span class="notes-search-icon">🔍</span><input class="notes-search" type="text" placeholder="Search notes or #tag…" value="${esc(noteSearch)}" oninput="setNoteSearch(this.value)" autocomplete="off"></div>`;
+  if(!visible.length){H+=`<div class="notes-empty">${noteSearch?'No notes match your search':'No notes yet — click + New note to start'}</div>`;}
+  for(const n of visible){
+    const open=!n.collapsed;
+    H+=`<div class="note-card">`;
+    H+=`<div class="note-header" onclick="toggleNote('${n.id}')">`;
+    H+=`<span class="note-date">${esc(n.dateStr)}</span>`;
+    H+=`<span style="color:var(--txt3);font-size:12px;flex-shrink:0">—</span>`;
+    H+=`<input id="nt-${n.id}" class="note-title-input" type="text" placeholder="Untitled" value="${esc(n.title)}" oninput="updNoteTitle('${n.id}',this.value)" onclick="event.stopPropagation()" autocomplete="off">`;
+    H+=`<button class="note-del" onclick="event.stopPropagation();delNote('${n.id}')" title="Delete note">×</button>`;
+    H+=`<span class="note-chevron${open?' open':''}">▾</span>`;
+    H+=`</div>`;
+    if(open){H+=`<div class="note-body"><textarea id="nc-${n.id}" class="note-textarea" placeholder="Write your note here… use #hashtags" oninput="updNoteContent('${n.id}',this.value)">${esc(n.content)}</textarea></div>`;}
+    H+=`</div>`;
+  }
+  return H;
+}
+function buildHashtagHTML(){
+  const tags=extractHashtags();
+  let H='';
+  H+=`<div class="pcard">`;
+  H+=`<div class="ptitle">Hashtags</div>`;
+  if(!tags.length){H+=`<div style="font-size:13px;color:var(--txt3);line-height:1.6">Use <span style="font-family:var(--mono);background:var(--surf2);padding:1px 6px;border-radius:4px">#word</span> anywhere in your notes to create hashtags.</div>`;}
+  else{
+    H+=`<div class="hashtag-wrap">`;
+    for(const tag of tags){const active=noteSearch===tag;H+=`<button class="hash-chip${active?' active':''}" onclick="filterByTag('${esc(tag)}')">${esc(tag)}</button>`;}
+    H+=`</div>`;
+    if(noteSearch)H+=`<button onclick="filterByTag('')" style="margin-top:10px;font-size:11px;padding:3px 10px;background:none;border:.5px solid var(--bdr2);border-radius:999px;cursor:pointer;color:var(--txt3);font-family:inherit">× Clear filter</button>`;
+  }
+  H+=`</div>`;
+  return H;
+}
+function renderNotes(){
+  // used only in timeline view (notes below calendar)
+  // in notes view, notes are rendered inline by render()
+  const root=document.getElementById('notes-root');if(!root)return;
+  if(viewMode==='notes'){root.innerHTML='';return;}
+  root.innerHTML=''; // hidden in timeline view too; content is in notes view only
+}
 
 window.fillBackward=()=>{
   const cdk=dk();
@@ -588,8 +702,7 @@ function render(){
   H+=`<button class="nbtn" onclick="chDay(1)">→</button>`;
   H+=`<button class="tbtn" onclick="goToday()">Today</button>`;
   H+=`</div><div class="topbar-right">`;
-  H+=`<button class="cbtn" onclick="clearDay()">Clear day</button>`;
-  H+=`<button class="fbtn" onclick="fillBackward()" title="Fill all empty blocks on this day: each blank inherits the activity and note of the next assigned block">↑ Fill blanks</button>`;
+  if(viewMode==='timeline'){H+=`<button class="cbtn" onclick="clearDay()">Clear day</button>`;H+=`<button class="fbtn" onclick="fillBackward()" title="Fill all empty blocks on this day: each blank inherits the activity and note of the next assigned block">↑ Fill blanks</button>`;}
   H+=`<div id="auth-bar" style="display:flex;align-items:center;gap:7px"></div>`;
   H+=`</div></div>`;
 
@@ -604,55 +717,70 @@ function render(){
     H+=`</div></div></div>`;
   }
 
-  // stats
-  H+=`<div class="stats-row">`;
-  if(tot>0){for(const[aid,cnt]of Object.entries(stats)){const a=acts.find(x=>x.id===aid);if(!a)continue;const c=col(a.colorId),mins=cnt*20,lbl=mins>=60?`${Math.floor(mins/60)}h${mins%60?' '+mins%60+'m':''}` :`${mins}m`;H+=`<span class="chip" style="background:${c.bg};color:${c.fg}">${esc(a.name)} · ${lbl}</span>`;}H+=`<span class="chip" style="background:var(--surf2);color:var(--txt3)">${(72-tot)*20}m free</span>`;}
-  else H+=`<span style="font-size:13px;color:var(--txt3)">Click any block to assign an activity</span>`;
-  H+=`</div>`;
-  if(tot>0){H+=`<div class="prog-bar">`;for(const[aid,cnt]of Object.entries(stats)){const a=acts.find(x=>x.id===aid);if(!a)continue;H+=`<div class="prog-seg" style="width:${(cnt/72*100).toFixed(1)}%;background:${col(a.colorId).bg}"></div>`;}H+=`</div>`;}
-  else H+=`<div style="margin-bottom:16px"></div>`;
+  if(viewMode==='timeline'){
+    // ── TIMELINE VIEW ────────────────────────────────────────────────
+    H+=`<div class="stats-row">`;
+    if(tot>0){for(const[aid,cnt]of Object.entries(stats)){const a=acts.find(x=>x.id===aid);if(!a)continue;const c=col(a.colorId),mins=cnt*20,lbl=mins>=60?`${Math.floor(mins/60)}h${mins%60?' '+mins%60+'m':''}` :`${mins}m`;H+=`<span class="chip" style="background:${c.bg};color:${c.fg}">${esc(a.name)} · ${lbl}</span>`;}H+=`<span class="chip" style="background:var(--surf2);color:var(--txt3)">${(72-tot)*20}m free</span>`;}
+    else H+=`<span style="font-size:13px;color:var(--txt3)">Click any block to assign an activity</span>`;
+    H+=`</div>`;
+    if(tot>0){H+=`<div class="prog-bar">`;for(const[aid,cnt]of Object.entries(stats)){const a=acts.find(x=>x.id===aid);if(!a)continue;H+=`<div class="prog-seg" style="width:${(cnt/72*100).toFixed(1)}%;background:${col(a.colorId).bg}"></div>`;}H+=`</div>`;}
+    else H+=`<div style="margin-bottom:16px"></div>`;
 
-  H+=`<div class="layout">`;
-
-  // calendar grid
-  H+=`<div class="grid-wrap">`;
-  for(let hr=0;hr<24;hr++){
-    H+=`<div class="hr-head"><span class="hr-lbl">${fmtH(hr)}</span><div class="hr-line"></div></div>`;
-    for(let sl=0;sl<3;sl++){
-      const key=`${cdk}:${hr}:${sl}`,bv=normB(blocks[key]),actId=bv?.actId,note=bv?.note||'',a=actId?acts.find(x=>x.id===actId):null,c=a?col(a.colorId):null,isSel=selBlk===key,isLast=hr===23&&sl===2;
-      H+=`<div class="blk-wrap" style="${isLast?'border-bottom:none':''}"><div class="blk-row" onclick="selBlkFn('${key}')"><span class="t-lbl">${fmtT(hr,sl)}</span><div class="bf${a?'':' empty'}" style="${c?`background:${c.bg};color:${c.fg}`:''}">`;
-      if(a){H+=`<span class="bn">${esc(a.name)}</span>`;if(note)H+=`<span class="nt">· ${esc(note)}</span>`;}
-      H+=`</div></div>`;
-      if(isSel){
-        H+=`<div class="exp-panel"><textarea class="exp-note" rows="2" placeholder="Add a note for this block…" oninput="updNote(this.value)">${esc(expNote)}</textarea>`;
-        for(const cat of cats){const ca=sortActs(acts.filter(a=>a.catId===cat.id));if(!ca.length)continue;H+=`<div class="exp-cat-group"><div class="exp-cat-lbl"><span>${cat.icon}</span>${esc(cat.name)}</div><div class="exp-acts">`;for(const x of ca){const xc=col(x.colorId);H+=`<button class="pbtn" onclick="assign('${key}','${x.id}')" style="background:${xc.bg};color:${xc.fg}" title="${esc(x.desc||x.name)}">${esc(x.name)}</button>`;}H+=`</div></div>`;}
-        const oth=sortActs(acts.filter(a=>!cats.find(c=>c.id===a.catId)));if(oth.length){H+=`<div class="exp-cat-group"><div class="exp-cat-lbl">Other</div><div class="exp-acts">`;for(const x of oth){const xc=col(x.colorId);H+=`<button class="pbtn" onclick="assign('${key}','${x.id}')" style="background:${xc.bg};color:${xc.fg}">${esc(x.name)}</button>`;}H+=`</div></div>`;}
-        if(actId)H+=`<button class="pbtn clr-btn" onclick="assign('${key}','__clr__')">Clear</button>`;
+    H+=`<div class="layout">`;
+    // calendar grid
+    H+=`<div class="grid-wrap">`;
+    for(let hr=0;hr<24;hr++){
+      H+=`<div class="hr-head"><span class="hr-lbl">${fmtH(hr)}</span><div class="hr-line"></div></div>`;
+      for(let sl=0;sl<3;sl++){
+        const key=`${cdk}:${hr}:${sl}`,bv=normB(blocks[key]),actId=bv?.actId,note=bv?.note||'',a=actId?acts.find(x=>x.id===actId):null,c=a?col(a.colorId):null,isSel=selBlk===key,isLast=hr===23&&sl===2;
+        H+=`<div class="blk-wrap" style="${isLast?'border-bottom:none':''}"><div class="blk-row" onclick="selBlkFn('${key}')"><span class="t-lbl">${fmtT(hr,sl)}</span><div class="bf${a?'':' empty'}" style="${c?`background:${c.bg};color:${c.fg}`:''}">`;
+        if(a){H+=`<span class="bn">${esc(a.name)}</span>`;if(note)H+=`<span class="nt">· ${esc(note)}</span>`;}
+        H+=`</div></div>`;
+        if(isSel){
+          H+=`<div class="exp-panel"><textarea class="exp-note" rows="2" placeholder="Add a note for this block…" oninput="updNote(this.value)">${esc(expNote)}</textarea>`;
+          for(const cat of cats){const ca=sortActs(acts.filter(a=>a.catId===cat.id));if(!ca.length)continue;H+=`<div class="exp-cat-group"><div class="exp-cat-lbl"><span>${cat.icon}</span>${esc(cat.name)}</div><div class="exp-acts">`;for(const x of ca){const xc=col(x.colorId);H+=`<button class="pbtn" onclick="assign('${key}','${x.id}')" style="background:${xc.bg};color:${xc.fg}" title="${esc(x.desc||x.name)}">${esc(x.name)}</button>`;}H+=`</div></div>`;}
+          const oth=sortActs(acts.filter(a=>!cats.find(c=>c.id===a.catId)));if(oth.length){H+=`<div class="exp-cat-group"><div class="exp-cat-lbl">Other</div><div class="exp-acts">`;for(const x of oth){const xc=col(x.colorId);H+=`<button class="pbtn" onclick="assign('${key}','${x.id}')" style="background:${xc.bg};color:${xc.fg}">${esc(x.name)}</button>`;}H+=`</div></div>`;}
+          if(actId)H+=`<button class="pbtn clr-btn" onclick="assign('${key}','__clr__')">Clear</button>`;
+          H+=`</div>`;
+        }
         H+=`</div>`;
       }
+    }
+    H+=`</div>`;
+    // sidebar
+    H+=`<div class="side">`;
+    H+=`<button class="view-toggle-btn" onclick="setView('notes')">📝 Go to notes</button>`;
+    H+=`<div class="pcard"><div class="ptitle">Activity palette</div>`;
+    for(const cat of cats){const ca=sortActs(acts.filter(a=>a.catId===cat.id));if(!ca.length)continue;H+=`<div class="cat-sec"><div class="cat-lbl"><span>${cat.icon}</span>${esc(cat.name)}</div>`;for(const a of ca){const c=col(a.colorId);H+=`<div class="a-row"><div class="a-dot" style="background:${c.bg};outline:1.5px solid ${c.fg}44;outline-offset:-1px"></div><div><div class="a-nm">${esc(a.name)}</div>${a.desc?`<div class="a-desc">${esc(a.desc)}</div>`:''}</div></div>`;}H+=`</div>`;}
+    H+=`<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px">`;
+    H+=`<button class="edit-pal-btn" onclick="openModal()"><span>✏️</span> Edit palette</button>`;
+    H+=`<button class="edit-pal-btn" onclick="openExModal('exportTl')" style="font-size:12px"><span>📅</span> Export timeline CSV</button>`;
+    H+=`</div></div>`;
+    if(tot>0){
+      H+=`<div class="pcard"><div class="ptitle">Day summary</div>`;
+      const byCat={};for(const[aid,cnt]of Object.entries(stats)){const a=acts.find(x=>x.id===aid);if(!a)continue;const cid=a.catId||'other';if(!byCat[cid])byCat[cid]=[];byCat[cid].push({a,cnt});}
+      for(const cat of[...cats,{id:'other',name:'Other',icon:''}]){const items=byCat[cat.id];if(!items||!items.length)continue;H+=`<div style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin:10px 0 5px">${cat.icon} ${esc(cat.name)}</div>`;for(const{a,cnt}of items){const c=col(a.colorId),mins=cnt*20,pct=Math.round(cnt/72*100);H+=`<div class="srow"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:500">${esc(a.name)}</span><span style="color:var(--txt2)">${mins}m · ${pct}%</span></div><div class="sbar"><div class="sfill" style="width:${pct}%;background:${c.bg}"></div></div></div>`;}}
+      const fm=(72-tot)*20;if(fm>0)H+=`<div style="font-size:12px;color:var(--txt3);margin-top:8px;padding-top:8px;border-top:.5px solid var(--bdr)">${fm}m unassigned · ${Math.round((72-tot)/72*100)}%</div>`;
       H+=`</div>`;
     }
-  }
-  H+=`</div>`;
+    H+=`</div></div>`;
 
-  // sidebar
-  H+=`<div class="side"><div class="pcard"><div class="ptitle">Activity palette</div>`;
-  for(const cat of cats){const ca=sortActs(acts.filter(a=>a.catId===cat.id));if(!ca.length)continue;H+=`<div class="cat-sec"><div class="cat-lbl"><span>${cat.icon}</span>${esc(cat.name)}</div>`;for(const a of ca){const c=col(a.colorId);H+=`<div class="a-row"><div class="a-dot" style="background:${c.bg};outline:1.5px solid ${c.fg}44;outline-offset:-1px"></div><div><div class="a-nm">${esc(a.name)}</div>${a.desc?`<div class="a-desc">${esc(a.desc)}</div>`:''}</div></div>`;}H+=`</div>`;}
-  H+=`<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px">`;
-  H+=`<button class="edit-pal-btn" onclick="openModal()"><span>✏️</span> Edit palette</button>`;
-  H+=`<button class="edit-pal-btn" onclick="openExModal('exportTl')" style="font-size:12px"><span>📅</span> Export timeline CSV</button>`;
-  H+=`</div></div>`;
-
-  if(tot>0){
-    H+=`<div class="pcard"><div class="ptitle">Day summary</div>`;
-    const byCat={};for(const[aid,cnt]of Object.entries(stats)){const a=acts.find(x=>x.id===aid);if(!a)continue;const cid=a.catId||'other';if(!byCat[cid])byCat[cid]=[];byCat[cid].push({a,cnt});}
-    for(const cat of[...cats,{id:'other',name:'Other',icon:''}]){const items=byCat[cat.id];if(!items||!items.length)continue;H+=`<div style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin:10px 0 5px">${cat.icon} ${esc(cat.name)}</div>`;for(const{a,cnt}of items){const c=col(a.colorId),mins=cnt*20,pct=Math.round(cnt/72*100);H+=`<div class="srow"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:500">${esc(a.name)}</span><span style="color:var(--txt2)">${mins}m · ${pct}%</span></div><div class="sbar"><div class="sfill" style="width:${pct}%;background:${c.bg}"></div></div></div>`;}}
-    const fm=(72-tot)*20;if(fm>0)H+=`<div style="font-size:12px;color:var(--txt3);margin-top:8px;padding-top:8px;border-top:.5px solid var(--bdr)">${fm}m unassigned · ${Math.round((72-tot)/72*100)}%</div>`;
+  } else {
+    // ── NOTES VIEW ───────────────────────────────────────────────────
+    H+=`<div class="layout" style="margin-top:8px">`;
+    // left: notes panel
+    H+=`<div class="notes-col"><div class="notes-panel">${buildNotesHTML()}</div></div>`;
+    // right: hashtag panel
+    H+=`<div class="side">`;
+    H+=`<button class="view-toggle-btn" onclick="setView('timeline')">← Go to timeline</button>`;
+    H+=buildHashtagHTML();
+    H+=`</div>`;
     H+=`</div>`;
   }
-  H+=`</div></div>`;
   document.getElementById('app').innerHTML=H;
   renderAuthBar();
+  renderNotes();
+  if(viewMode==='notes'){for(const n of notes){if(!n.collapsed)autoResizeNote(n.id);}}
 
   if(pickerOpen){setTimeout(()=>{document.addEventListener('click',function h(e){if(!e.target.closest('.picker-wrap')&&!e.target.closest('.date-lbl')){pickerOpen=false;render();}document.removeEventListener('click',h);});},0);}
 }
@@ -790,6 +918,7 @@ loadLocal();
 render();
 renderModal();
 renderExModal();
+renderNotes();
 </script>
 </body>
 </html>
